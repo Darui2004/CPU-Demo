@@ -4,17 +4,17 @@
 #define REG_NUM 32
 #define MEM_SIZE 32
 
-uint32_t reg[REG_NUM]; // ¼Ä´æÆ÷
-uint32_t mem[MEM_SIZE]; // ÄÚ´æ
-uint32_t PC = 0; // ³ÌĞò¼ÆÊıÆ÷
-int halt_flag = 0; // Í£Ö¹±êÖ¾
+uint32_t reg[REG_NUM]; // å¯„å­˜å™¨
+uint32_t mem[MEM_SIZE]; // å†…å­˜
+uint32_t PC = 0; // ç¨‹åºè®¡æ•°å™¨
+int halt_flag = 0; // åœæ­¢æ ‡å¿—
 
-//ÉèÖÃ¿ØÖÆĞÅºÅ½á¹¹Ìå
+//è®¾ç½®æ§åˆ¶ä¿¡å·ç»“æ„ä½“
 typedef enum {
     MUL, ADDI, BNE, ADD, LW,
 } ALUOperation;
 
-//ÉèÖÃ¿ØÖÆĞÅºÅ½á¹¹Ìå
+//è®¾ç½®æ§åˆ¶ä¿¡å·ç»“æ„ä½“
 typedef struct {
     uint8_t RegDst;
     uint8_t ALUSrc;
@@ -38,7 +38,7 @@ uint32_t ALU(uint32_t A, uint32_t B, ALUOperation op) {
     }
 }
 
-// ´ÓÄÚ´æÖĞ»ñÈ¡Ö¸Áî
+// ä»å†…å­˜ä¸­è·å–æŒ‡ä»¤
 uint32_t fetch() {
     if (PC / 4 >= MEM_SIZE) {
         halt_flag = 1;
@@ -48,7 +48,7 @@ uint32_t fetch() {
 }
 
 
-//½âÂë
+//è§£ç 
 void decode(uint32_t instruction, ControlSignals *ctrl, uint32_t *rs1, uint32_t *rs2, uint32_t *rd, uint32_t *imm) {
     uint32_t opcode = instruction & 0x7F;
     uint32_t funct3 = (instruction >> 12) & 0x07;
@@ -58,7 +58,7 @@ void decode(uint32_t instruction, ControlSignals *ctrl, uint32_t *rs1, uint32_t 
     *rs2 = (instruction >> 20) & 0x1F;
     *imm = 0;
 
-//³õÊ¼»¯¿ØÖÆĞÅºÅ
+//åˆå§‹åŒ–æ§åˆ¶ä¿¡å·
     ctrl->RegDst = 0;
     ctrl->ALUSrc = 0;
     ctrl->MemtoReg = 0;
@@ -68,9 +68,9 @@ void decode(uint32_t instruction, ControlSignals *ctrl, uint32_t *rs1, uint32_t 
     ctrl->Branch = 0;
     ctrl->Jump = 0;
 
-//²Ù×÷Êı
+//æ“ä½œæ•°
     switch (opcode) {
-        case 0x03: // LWÖ¸Áî
+        case 0x03: // LWæŒ‡ä»¤
             ctrl->ALUSrc = 1;
             ctrl->MemtoReg = 1;
             ctrl->RegWrite = 1;
@@ -79,14 +79,14 @@ void decode(uint32_t instruction, ControlSignals *ctrl, uint32_t *rs1, uint32_t 
             if (*imm & 0x800) *imm |= 0xFFFFF000; // Sign extend
             ctrl->ALUOp = ADD;
             break;
-        case 0x13: // ADDIÖ¸Áî
+        case 0x13: // ADDIæŒ‡ä»¤
             ctrl->ALUSrc = 1;
             ctrl->RegWrite = 1;
             *imm = (instruction >> 20) & 0xFFF;
             if (*imm & 0x800) *imm |= 0xFFFFF000;
             ctrl->ALUOp = ADDI;
             break;
-        case 0x63: // BNEÖ¸Áî
+        case 0x63: // BNEæŒ‡ä»¤
             ctrl->Branch = 1;
             ctrl->ALUOp = BNE;
             *imm = ((instruction >> 31) & 0x1) << 12 |
@@ -95,7 +95,7 @@ void decode(uint32_t instruction, ControlSignals *ctrl, uint32_t *rs1, uint32_t 
                    ((instruction >> 8) & 0xF) << 1;
             if (*imm & 0x1000) *imm |= 0xFFFFE000; // Sign extend
             break;
-        case 0x33: // MULÖ¸Áî
+        case 0x33: // MULæŒ‡ä»¤
             ctrl->RegDst = 1;
             ctrl->RegWrite = 1;
             switch (funct3) {
@@ -111,22 +111,22 @@ void decode(uint32_t instruction, ControlSignals *ctrl, uint32_t *rs1, uint32_t 
     }
 }
 
-// Ö´ĞĞÖ¸Áî
+// æ‰§è¡ŒæŒ‡ä»¤
 void execute(uint32_t rs1, uint32_t rs2, uint32_t rd, uint32_t imm, ControlSignals ctrl) {
     uint32_t ALUResult;
     if (ctrl.ALUSrc) {
-        ALUResult = ALU(reg[rs1], imm, ctrl.ALUOp); //´¦ÀíÁ¢¼´Êı²Ù×÷
+        ALUResult = ALU(reg[rs1], imm, ctrl.ALUOp); //å¤„ç†ç«‹å³æ•°æ“ä½œ
     } else {
-        ALUResult = ALU(reg[rs1], reg[rs2], ctrl.ALUOp); // ´¦Àí¼Ä´æÆ÷²Ù×÷
+        ALUResult = ALU(reg[rs1], reg[rs2], ctrl.ALUOp); // å¤„ç†å¯„å­˜å™¨æ“ä½œ
     }
 
     if (ctrl.MemRead) {
         reg[rd] = mem[ALUResult / 4];
     } else if (ctrl.RegWrite) {
-        reg[rd] = ALUResult;//Ğ´Èë¼Ä´æÆ÷
+        reg[rd] = ALUResult;//å†™å…¥å¯„å­˜å™¨
     }
 
-    if (ctrl.Branch) { //·ÖÖ§
+    if (ctrl.Branch) { //åˆ†æ”¯
         ALUResult = ALU(reg[rs1], reg[rs2], ctrl.ALUOp);
 
 
@@ -142,7 +142,7 @@ void execute(uint32_t rs1, uint32_t rs2, uint32_t rd, uint32_t imm, ControlSigna
     }
 }
 
-//Êä³öËùÓĞ¼Ä´æÆ÷µÄÖµ
+//è¾“å‡ºæ‰€æœ‰å¯„å­˜å™¨çš„å€¼
 void print_registers() {
     for (int i = 0; i < REG_NUM; i++) {
         printf("R%02d = %d\n", i, reg[i]);
@@ -153,13 +153,13 @@ int main() {
     PC = 0;
     for (int i = 0; i < REG_NUM; i++) reg[i] = 0;
     for (int i = 0; i < MEM_SIZE; i++) mem[i] = 0;
-    mem[10] = 1;       // ÄÚ´æµØÖ· 40: ÖµÎª 1£¨ÓÃÓÚ¼ÓÔØµ½¼Ä´æÆ÷£©
-    mem[11] = 2;       // ÄÚ´æµØÖ· 44: ÖµÎª 2£¨ÓÃÓÚ¼ÓÔØµ½¼Ä´æÆ÷£©
-    mem[12] = 9;       // ÄÚ´æµØÖ· 48: ÖµÎª 9£¨ÓÃÓÚ·ÖÖ§±È½Ï£©
+    mem[10] = 1;       // å†…å­˜åœ°å€ 40: å€¼ä¸º 1ï¼ˆç”¨äºåŠ è½½åˆ°å¯„å­˜å™¨ï¼‰
+    mem[11] = 2;       // å†…å­˜åœ°å€ 44: å€¼ä¸º 2ï¼ˆç”¨äºåŠ è½½åˆ°å¯„å­˜å™¨ï¼‰
+    mem[12] = 9;       // å†…å­˜åœ°å€ 48: å€¼ä¸º 9ï¼ˆç”¨äºåˆ†æ”¯æ¯”è¾ƒï¼‰
 
-    mem[0] = 0x02802083; // LW R1, 100(R0)
-    mem[1] = 0x02c02103; // LW R2, 104(R0)
-    mem[2] = 0x03002183; // LW R3, 108(R0)
+    mem[0] = 0x02802083; // LW R1, 40(R0)
+    mem[1] = 0x02c02103; // LW R2, 44(R0)
+    mem[2] = 0x03002183; // LW R3, 48(R0)
     mem[3] = 0x022080B3; // MUL R1, R1, R2
     mem[4] = 0x00110113; // ADDI R2, R2, 1
     mem[5] = 0xFE311FE3; // BNE R2, R3, -2
@@ -181,8 +181,8 @@ int main() {
         }
     }
     printf("\n");
- printf("¼Ä´æÆ÷µÄÖµÎª\n");
-    print_registers();  // µ÷ÓÃ´òÓ¡¼Ä´æÆ÷ÖµµÄº¯Êı
+ printf("å¯„å­˜å™¨çš„å€¼ä¸º\n");
+    print_registers();  // è°ƒç”¨æ‰“å°å¯„å­˜å™¨å€¼çš„å‡½æ•°
     return 0;
 }
 
