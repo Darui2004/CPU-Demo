@@ -9,12 +9,11 @@ uint32_t mem[MEM_SIZE]; // 内存
 uint32_t PC = 0; // 程序计数器
 int halt_flag = 0; // 停止标志
 
-//设置控制信号结构体
+// 设置控制信号结构体
 typedef enum {
-    MUL, ADDI, BNE, ADD, LW,
+    MUL, ADDI, BNE, ADD, LW, HLT
 } ALUOperation;
 
-//设置控制信号结构体
 typedef struct {
     uint8_t RegDst;
     uint8_t ALUSrc;
@@ -47,8 +46,7 @@ uint32_t fetch() {
     return mem[PC / 4];
 }
 
-
-//解码
+// 解码
 void decode(uint32_t instruction, ControlSignals *ctrl, uint32_t *rs1, uint32_t *rs2, uint32_t *rd, uint32_t *imm) {
     uint32_t opcode = instruction & 0x7F;
     uint32_t funct3 = (instruction >> 12) & 0x07;
@@ -58,7 +56,7 @@ void decode(uint32_t instruction, ControlSignals *ctrl, uint32_t *rs1, uint32_t 
     *rs2 = (instruction >> 20) & 0x1F;
     *imm = 0;
 
-//初始化控制信号
+    // 初始化控制信号
     ctrl->RegDst = 0;
     ctrl->ALUSrc = 0;
     ctrl->MemtoReg = 0;
@@ -68,7 +66,7 @@ void decode(uint32_t instruction, ControlSignals *ctrl, uint32_t *rs1, uint32_t 
     ctrl->Branch = 0;
     ctrl->Jump = 0;
 
-//操作数
+    // 操作数
     switch (opcode) {
         case 0x03: // LW指令
             ctrl->ALUSrc = 1;
@@ -108,14 +106,23 @@ void decode(uint32_t instruction, ControlSignals *ctrl, uint32_t *rs1, uint32_t 
                     break;
             }
             break;
+        case 0x7F: // HLT指令
+            halt_flag = 1;
+            ctrl->ALUOp = HLT;
+            break;
     }
+}
+
+void next_instruction() {
+    printf("当前的程序计数器（PC）: %u\n", PC);
 }
 
 // 执行指令
 void execute(uint32_t rs1, uint32_t rs2, uint32_t rd, uint32_t imm, ControlSignals ctrl) {
     uint32_t ALUResult;
+
     if (ctrl.ALUSrc) {
-        ALUResult = ALU(reg[rs1], imm, ctrl.ALUOp); //处理立即数操作
+        ALUResult = ALU(reg[rs1], imm, ctrl.ALUOp); // 处理立即数操作
     } else {
         ALUResult = ALU(reg[rs1], reg[rs2], ctrl.ALUOp); // 处理寄存器操作
     }
@@ -123,16 +130,16 @@ void execute(uint32_t rs1, uint32_t rs2, uint32_t rd, uint32_t imm, ControlSigna
     if (ctrl.MemRead) {
         reg[rd] = mem[ALUResult / 4];
     } else if (ctrl.RegWrite) {
-        reg[rd] = ALUResult;//写入寄存器
+        reg[rd] = ALUResult; // 写入寄存器
     }
 
-    if (ctrl.Branch) { //分支
+    if (ctrl.Branch) { // 分支逻辑
         ALUResult = ALU(reg[rs1], reg[rs2], ctrl.ALUOp);
-
-
-        printf("\n");
         if (ALUResult != 0) {
             PC += (int32_t)imm << 2;
+            return;
+        } else if (reg[2] == reg[3]) { // 添加条件：r[2] == r[3] 时退出
+            halt_flag = 1; // 终止程序
             return;
         }
     }
@@ -142,7 +149,7 @@ void execute(uint32_t rs1, uint32_t rs2, uint32_t rd, uint32_t imm, ControlSigna
     }
 }
 
-//输出所有寄存器的值
+// 输出所有寄存器的值
 void print_registers() {
     for (int i = 0; i < REG_NUM; i++) {
         printf("R%02d = %d\n", i, reg[i]);
@@ -153,9 +160,10 @@ int main() {
     PC = 0;
     for (int i = 0; i < REG_NUM; i++) reg[i] = 0;
     for (int i = 0; i < MEM_SIZE; i++) mem[i] = 0;
-    mem[10] = 1;       // 内存地址 40: 值为 1（用于加载到寄存器）
-    mem[11] = 2;       // 内存地址 44: 值为 2（用于加载到寄存器）
-    mem[12] = 9;       // 内存地址 48: 值为 9（用于分支比较）
+
+    mem[10] = 1;  // 内存地址 40: 值为 1（用于加载到寄存器）
+    mem[11] = 2;  // 内存地址 44: 值为 2（用于加载到寄存器）
+    mem[12] = 9;  // 内存地址 48: 值为 9（用于分支比较）
 
     mem[0] = 0x02802083; // LW R1, 40(R0)
     mem[1] = 0x02c02103; // LW R2, 44(R0)
@@ -163,26 +171,27 @@ int main() {
     mem[3] = 0x022080B3; // MUL R1, R1, R2
     mem[4] = 0x00110113; // ADDI R2, R2, 1
     mem[5] = 0xFE311FE3; // BNE R2, R3, -2
+    mem[6] = 0x0000007F; // HLT
 
-
-    while (PC < MEM_SIZE && !halt_flag) {
+    while (PC < MEM_SIZE) {
         uint32_t instruction = fetch();
-        if (halt_flag) break;
+        if (halt_flag) {
+            printf("遇到 HLT 指令，停止执行。\n");
+            break;
+        }
 
         ControlSignals ctrl;
         uint32_t rs1, rs2, rd, imm;
         decode(instruction, &ctrl, &rs1, &rs2, &rd, &imm);
         execute(rs1, rs2, rd, imm, ctrl);
 
-        printf("PC: %d, reg[1]: %d, reg[2]: %d, reg[3]: %d\n", PC, reg[1], reg[2], reg[3]);
-        if(reg[2]==reg[3]&&reg[2]!=0&&reg[3]!=0)
-        {
-            break;
-        }
+        printf("reg[1]: %d, reg[2]: %d, reg[3]: %d, 立即数为:%d\n", reg[1], reg[2], reg[3], imm);
+        next_instruction();
+        printf("\n");
     }
-    printf("\n");
- printf("寄存器的值为\n");
+
+    printf("寄存器的值为\n");
     print_registers();  // 调用打印寄存器值的函数
+
     return 0;
 }
-
